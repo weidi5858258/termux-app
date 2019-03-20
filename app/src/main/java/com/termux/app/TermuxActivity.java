@@ -83,6 +83,9 @@ import androidx.viewpager.widget.ViewPager;
  */
 public final class TermuxActivity extends Activity {
 
+    private static final String TAG = TermuxActivity.class.getSimpleName();
+    private static final boolean DEBUG = true;
+
     private static final int CONTEXTMENU_SELECT_URL_ID = 0;
     private static final int CONTEXTMENU_SHARE_TRANSCRIPT_ID = 1;
     private static final int CONTEXTMENU_PASTE_ID = 3;
@@ -104,6 +107,8 @@ public final class TermuxActivity extends Activity {
     @SuppressWarnings("NullableProblems")
     @NonNull
     TerminalView mTerminalView;
+
+    ViewPager mViewPager;
 
     ExtraKeysView mExtraKeysView;
 
@@ -141,99 +146,56 @@ public final class TermuxActivity extends Activity {
     public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
 
-        mSettings = new TermuxPreferences(this);
-
         setContentView(R.layout.drawer_layout);
+
+        mSettings = new TermuxPreferences(this);
         mTerminalView = findViewById(R.id.terminal_view);
         mTerminalView.setOnKeyListener(new TermuxViewClient(this));
-
         mTerminalView.setTextSize(mSettings.getFontSize());
         mTerminalView.setKeepScreenOn(mSettings.isScreenAlwaysOn());
         mTerminalView.requestFocus();
 
-        final ViewPager viewPager = findViewById(R.id.viewpager);
-        if (mSettings.mShowExtraKeys) viewPager.setVisibility(View.VISIBLE);
+        mViewPager = findViewById(R.id.viewpager);
+        if (mSettings.mShowExtraKeys) {
+            mViewPager.setVisibility(View.VISIBLE);
+        }
 
-
-        ViewGroup.LayoutParams layoutParams = viewPager.getLayoutParams();
+        ViewGroup.LayoutParams layoutParams = mViewPager.getLayoutParams();
         layoutParams.height = layoutParams.height * mSettings.mExtraKeys.length;
-        viewPager.setLayoutParams(layoutParams);
+        if (DEBUG) {
+            Log.i(TAG, "onCreate() layoutParams.height: " + layoutParams.height);
+        }
+        mViewPager.setLayoutParams(layoutParams);
 
-        viewPager.setAdapter(new PagerAdapter() {
-            @Override
-            public int getCount() {
-                return 2;
-            }
+        mViewPager.setAdapter(mPagerAdapter);
 
-            @Override
-            public boolean isViewFromObject(@NonNull View view, @NonNull Object object) {
-                return view == object;
-            }
-
-            @NonNull
-            @Override
-            public Object instantiateItem(@NonNull ViewGroup collection, int position) {
-                LayoutInflater inflater = LayoutInflater.from(TermuxActivity.this);
-                View layout;
-                if (position == 0) {
-                    layout = mExtraKeysView = (ExtraKeysView) inflater.inflate(R.layout.extra_keys_main, collection, false);
-                    mExtraKeysView.reload(mSettings.mExtraKeys, ExtraKeysView.defaultCharDisplay);
-                } else {
-                    layout = inflater.inflate(R.layout.extra_keys_right, collection, false);
-                    final EditText editText = layout.findViewById(R.id.text_input);
-                    editText.setOnEditorActionListener((v, actionId, event) -> {
-                        TerminalSession session = getCurrentTermSession();
-                        if (session != null) {
-                            if (session.isRunning()) {
-                                String textToSend = editText.getText().toString();
-                                if (textToSend.length() == 0) textToSend = "\r";
-                                session.write(textToSend);
-                            } else {
-                                removeFinishedSession(session);
-                            }
-                            editText.setText("");
-                        }
-                        return true;
-                    });
-                }
-                collection.addView(layout);
-                return layout;
-            }
-
-            @Override
-            public void destroyItem(@NonNull ViewGroup collection, int position, @NonNull Object view) {
-                collection.removeView((View) view);
-            }
-        });
-
-        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override
-            public void onPageSelected(int position) {
-                if (position == 0) {
-                    mTerminalView.requestFocus();
-                } else {
-                    final EditText editText = viewPager.findViewById(R.id.text_input);
-                    if (editText != null) editText.requestFocus();
-                }
-            }
-        });
+        mViewPager.addOnPageChangeListener(mViewPagerSimpleOnPageChangeListener);
 
         View newSessionButton = findViewById(R.id.new_session_button);
         newSessionButton.setOnClickListener(v -> addNewSession(false, null));
         newSessionButton.setOnLongClickListener(v -> {
-            DialogUtils.textInput(TermuxActivity.this, R.string.session_new_named_title, null, R.string.session_new_named_positive_button,
-                text -> addNewSession(false, text), R.string.new_session_failsafe, text -> addNewSession(true, text)
-                , -1, null, null);
+            DialogUtils.textInput(TermuxActivity.this,
+                R.string.session_new_named_title,
+                null,
+                R.string.session_new_named_positive_button,
+                text -> addNewSession(false, text),
+                R.string.new_session_failsafe,
+                text -> addNewSession(true, text),
+                -1,
+                null,
+                null);
             return true;
         });
 
-        findViewById(R.id.toggle_keyboard_button).setOnClickListener(v -> {
-            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        View toggleKeyboardButton = findViewById(R.id.toggle_keyboard_button);
+        toggleKeyboardButton.setOnClickListener(v -> {
+            InputMethodManager imm =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
             getDrawer().closeDrawers();
         });
 
-        findViewById(R.id.toggle_keyboard_button).setOnLongClickListener(v -> {
+        toggleKeyboardButton.setOnLongClickListener(v -> {
             toggleShowExtraKeys();
             return true;
         });
@@ -243,8 +205,9 @@ public final class TermuxActivity extends Activity {
         Intent serviceIntent = new Intent(this, TermuxService.class);
         // Start the service and make it run regardless of who is bound to it:
         startService(serviceIntent);
-        if (!bindService(serviceIntent, mServiceConnection, 0))
+        if (!bindService(serviceIntent, mServiceConnection, 0)) {
             throw new RuntimeException("bindService() failed");
+        }
 
         checkForFontAndColors();
 
@@ -636,8 +599,10 @@ public final class TermuxActivity extends Activity {
 
     private void checkForFontAndColors() {
         try {
-            @SuppressLint("SdCardPath") File fontFile = new File("/data/data/com.termux/files/home/.termux/font.ttf");
-            @SuppressLint("SdCardPath") File colorsFile = new File("/data/data/com.termux/files/home/.termux/colors.properties");
+            @SuppressLint("SdCardPath") File fontFile = new File(
+                "/data/data/com.termux/files/home/.termux/font.ttf");
+            @SuppressLint("SdCardPath") File colorsFile = new File(
+                "/data/data/com.termux/files/home/.termux/colors.properties");
 
             final Properties props = new Properties();
             if (colorsFile.isFile()) {
@@ -660,7 +625,7 @@ public final class TermuxActivity extends Activity {
         }
     }
 
-    private ServiceConnection mServiceConnection = new ServiceConnection() {
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
 
         /**
          * Part of the {@link ServiceConnection} interface. The service is bound with
@@ -863,5 +828,68 @@ public final class TermuxActivity extends Activity {
             }
         }
     };
+
+    private final PagerAdapter mPagerAdapter = new PagerAdapter() {
+        @Override
+        public int getCount() {
+            return 2;
+        }
+
+        @Override
+        public boolean isViewFromObject(@NonNull View view, @NonNull Object object) {
+            return view == object;
+        }
+
+        @NonNull
+        @Override
+        public Object instantiateItem(@NonNull ViewGroup collection, int position) {
+            LayoutInflater inflater = LayoutInflater.from(TermuxActivity.this);
+            View layout;
+            if (position == 0) {
+                layout = mExtraKeysView = (ExtraKeysView) inflater.inflate(
+                    R.layout.extra_keys_main, collection, false);
+                mExtraKeysView.reload(mSettings.mExtraKeys, ExtraKeysView.defaultCharDisplay);
+            } else {
+                layout = inflater.inflate(R.layout.extra_keys_right, collection, false);
+                final EditText editText = layout.findViewById(R.id.text_input);
+                editText.setOnEditorActionListener((v, actionId, event) -> {
+                    TerminalSession session = getCurrentTermSession();
+                    if (session != null) {
+                        if (session.isRunning()) {
+                            String textToSend = editText.getText().toString();
+                            if (textToSend.length() == 0) textToSend = "\r";
+                            session.write(textToSend);
+                        } else {
+                            removeFinishedSession(session);
+                        }
+                        editText.setText("");
+                    }
+                    return true;
+                });
+            }
+            collection.addView(layout);
+            return layout;
+        }
+
+        @Override
+        public void destroyItem(@NonNull ViewGroup collection, int position, @NonNull Object view) {
+            collection.removeView((View) view);
+        }
+    };
+
+    private final ViewPager.SimpleOnPageChangeListener mViewPagerSimpleOnPageChangeListener =
+        new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                if (position == 0) {
+                    mTerminalView.requestFocus();
+                } else {
+                    final EditText editText = mViewPager.findViewById(R.id.text_input);
+                    if (editText != null) {
+                        editText.requestFocus();
+                    }
+                }
+            }
+        };
 
 }

@@ -438,7 +438,7 @@ public final class TerminalView extends View {
     }
 
     /** Perform a scroll, either from dragging the screen or by scrolling a mouse wheel. */
-    void doScroll(MotionEvent event, int rowsDown) {
+    private void doScroll(MotionEvent event, int rowsDown) {
         boolean up = rowsDown < 0;
         int amount = Math.abs(rowsDown);
         for (int i = 0; i < amount; i++) {
@@ -465,6 +465,27 @@ public final class TerminalView extends View {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean onKeyPreIme(int keyCode, KeyEvent event) {
+        if (LOG_KEY_EVENTS)
+            Log.i(EmulatorDebug.LOG_TAG, "onKeyPreIme(keyCode=" + keyCode + ", event=" + event + ")");
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (mIsSelectingText) {
+                toggleSelectingText(null);
+                return true;
+            } else if (mClient.shouldBackButtonBeMappedToEscape()) {
+                // Intercept back button to treat it as escape:
+                switch (event.getAction()) {
+                    case KeyEvent.ACTION_DOWN:
+                        return onKeyDown(keyCode, event);
+                    case KeyEvent.ACTION_UP:
+                        return onKeyUp(keyCode, event);
+                }
+            }
+        }
+        return super.onKeyPreIme(keyCode, event);
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -557,27 +578,6 @@ public final class TerminalView extends View {
     }
 
     @Override
-    public boolean onKeyPreIme(int keyCode, KeyEvent event) {
-        if (LOG_KEY_EVENTS)
-            Log.i(EmulatorDebug.LOG_TAG, "onKeyPreIme(keyCode=" + keyCode + ", event=" + event + ")");
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (mIsSelectingText) {
-                toggleSelectingText(null);
-                return true;
-            } else if (mClient.shouldBackButtonBeMappedToEscape()) {
-                // Intercept back button to treat it as escape:
-                switch (event.getAction()) {
-                    case KeyEvent.ACTION_DOWN:
-                        return onKeyDown(keyCode, event);
-                    case KeyEvent.ACTION_UP:
-                        return onKeyUp(keyCode, event);
-                }
-            }
-        }
-        return super.onKeyPreIme(keyCode, event);
-    }
-
-    @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (LOG_KEY_EVENTS)
             Log.i(EmulatorDebug.LOG_TAG, "onKeyDown(keyCode=" + keyCode + ", isSystem()=" + event.isSystem() + ", event=" + event + ")");
@@ -640,6 +640,30 @@ public final class TerminalView extends View {
         }
 
         if (mCombiningAccent != oldCombiningAccent) invalidate();
+
+        return true;
+    }
+
+    /**
+     * Called when a key is released in the view.
+     *
+     * @param keyCode The keycode of the key which was released.
+     * @param event   A {@link KeyEvent} describing the event.
+     * @return Whether the event was handled.
+     */
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (LOG_KEY_EVENTS)
+            Log.i(EmulatorDebug.LOG_TAG, "onKeyUp(keyCode=" + keyCode + ", event=" + event + ")");
+        if (mEmulator == null) return true;
+
+        if (mClient.onKeyUp(keyCode, event)) {
+            invalidate();
+            return true;
+        } else if (event.isSystem()) {
+            // Let system key events through.
+            return super.onKeyUp(keyCode, event);
+        }
 
         return true;
     }
@@ -708,30 +732,6 @@ public final class TerminalView extends View {
         String code = KeyHandler.getCode(keyCode, keyMod, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode());
         if (code == null) return false;
         mTermSession.write(code);
-        return true;
-    }
-
-    /**
-     * Called when a key is released in the view.
-     *
-     * @param keyCode The keycode of the key which was released.
-     * @param event   A {@link KeyEvent} describing the event.
-     * @return Whether the event was handled.
-     */
-    @Override
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (LOG_KEY_EVENTS)
-            Log.i(EmulatorDebug.LOG_TAG, "onKeyUp(keyCode=" + keyCode + ", event=" + event + ")");
-        if (mEmulator == null) return true;
-
-        if (mClient.onKeyUp(keyCode, event)) {
-            invalidate();
-            return true;
-        } else if (event.isSystem()) {
-            // Let system key events through.
-            return super.onKeyUp(keyCode, event);
-        }
-
         return true;
     }
 

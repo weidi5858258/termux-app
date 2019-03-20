@@ -69,13 +69,13 @@ public final class ExtraKeysView extends GridLayout {
         put("DEL", KeyEvent.KEYCODE_FORWARD_DEL);
         put("BKSP", KeyEvent.KEYCODE_DEL);
         put("UP", KeyEvent.KEYCODE_DPAD_UP);
+        put("DOWN", KeyEvent.KEYCODE_DPAD_DOWN);
         put("LEFT", KeyEvent.KEYCODE_DPAD_LEFT);
         put("RIGHT", KeyEvent.KEYCODE_DPAD_RIGHT);
-        put("DOWN", KeyEvent.KEYCODE_DPAD_DOWN);
         put("ENTER", KeyEvent.KEYCODE_ENTER);
     }};
     
-    static void sendKey(View view, String keyName) {
+    private static void sendKey(View view, String keyName) {
         TerminalView terminalView = view.findViewById(R.id.terminal_view);
         if (keyCodesForString.containsKey(keyName)) {
             int keyCode = keyCodesForString.get(keyName);
@@ -127,7 +127,7 @@ public final class ExtraKeysView extends GridLayout {
         return true;
     }
 
-    void popup(View view, String text) {
+    private void popup(View view, String text) {
         int width = view.getMeasuredWidth();
         int height = view.getMeasuredHeight();
         Button button = new Button(getContext(), null, android.R.attr.buttonBarButtonStyle);
@@ -269,7 +269,7 @@ public final class ExtraKeysView extends GridLayout {
      * Applies the 'controlCharsAliases' mapping to all the strings in *buttons*
      * Modifies the array, doesn't return a new one.
      */
-    void replaceAliases(String[][] buttons) {
+    private void replaceAliases(String[][] buttons) {
         for(int i = 0; i < buttons.length; i++)
             for(int j = 0; j < buttons[i].length; j++)
                 buttons[i][j] = controlCharsAliases.get(buttons[i][j], buttons[i][j]);
@@ -278,7 +278,7 @@ public final class ExtraKeysView extends GridLayout {
     /**
      * General util function to compute the longest column length in a matrix.
      */
-    static int maximumLength(String[][] matrix) {
+    private static int maximumLength(String[][] matrix) {
         int m = 0;
         for (String[] aMatrix : matrix) m = Math.max(m, aMatrix.length);
         return m;
@@ -299,7 +299,7 @@ public final class ExtraKeysView extends GridLayout {
      * "−" will input a "−" character
      * "-_-" will input the string "-_-"
      */
-    void reload(String[][] buttons, CharDisplayMap charDisplayMap) {
+    public void reload(String[][] buttons, CharDisplayMap charDisplayMap) {
         for(SpecialButtonState state : specialButtons.values())
             state.button = null;
             

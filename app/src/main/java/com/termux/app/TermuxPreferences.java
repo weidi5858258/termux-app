@@ -6,7 +6,9 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 import android.util.TypedValue;
 import android.widget.Toast;
+
 import com.termux.terminal.TerminalSession;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -101,7 +103,7 @@ final class TermuxPreferences {
         } catch (NumberFormatException | ClassCastException e) {
             mFontSize = defaultFontSize;
         }
-        mFontSize = clamp(mFontSize, MIN_FONTSIZE, MAX_FONTSIZE); 
+        mFontSize = clamp(mFontSize, MIN_FONTSIZE, MAX_FONTSIZE);
     }
 
     boolean toggleShowExtraKeys(Context context) {
@@ -143,7 +145,7 @@ final class TermuxPreferences {
         }
         return null;
     }
-    
+
     void reloadFromProperties(Context context) {
         File propsFile = new File(TermuxService.HOME_PATH + "/.termux/termux.properties");
         if (!propsFile.exists())
@@ -174,7 +176,10 @@ final class TermuxPreferences {
         }
 
         try {
-            JSONArray arr = new JSONArray(props.getProperty("extra-keys", "[['ESC', 'TAB', 'CTRL', 'ALT', '-', 'DOWN', 'UP']]"));
+            JSONArray arr = new JSONArray(
+                props.getProperty(
+                    "extra-keys",
+                    "[['ESC', 'TAB', 'CTRL', 'ALT', '-', 'DOWN', 'UP']]"));
 
             mExtraKeys = new String[arr.length()][];
             for (int i = 0; i < arr.length(); i++) {
