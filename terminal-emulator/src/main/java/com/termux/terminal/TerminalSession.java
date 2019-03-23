@@ -43,7 +43,6 @@ public final class TerminalSession extends TerminalOutput {
         void onBell(TerminalSession session);
 
         void onColorsChanged(TerminalSession session);
-
     }
 
     private static FileDescriptor wrapFileDescriptor(int fileDescriptor) {

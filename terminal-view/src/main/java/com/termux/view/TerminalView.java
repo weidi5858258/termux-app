@@ -745,7 +745,7 @@ public final class TerminalView extends View {
     }
 
     /** Check if the terminal size in rows and columns should be updated. */
-    public void updateSize() {
+    private void updateSize() {
         int viewWidth = getWidth();
         int viewHeight = getHeight();
         if (viewWidth == 0 || viewHeight == 0 || mTermSession == null) return;
@@ -910,7 +910,6 @@ public final class TerminalView extends View {
                 mActionMode = startActionMode(callback);
             }
 
-
             invalidate();
         } else {
             mActionMode.finish();
@@ -924,7 +923,8 @@ public final class TerminalView extends View {
     }
 
     private CharSequence getText() {
-        return mEmulator.getScreen().getSelectedText(0, mTopRow, mEmulator.mColumns, mTopRow +mEmulator.mRows);
+        return mEmulator.getScreen().getSelectedText(
+            0, mTopRow, mEmulator.mColumns, mTopRow +mEmulator.mRows);
     }
 
 }
