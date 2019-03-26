@@ -80,14 +80,18 @@ public final class TerminalView extends View {
 
     public TerminalView(Context context, AttributeSet attributes) { // NO_UCD (unused code)
         super(context, attributes);
-        mGestureRecognizer = new GestureAndScaleRecognizer(context, new GestureAndScaleRecognizer.Listener() {
+        mGestureRecognizer = new GestureAndScaleRecognizer(
+            context, new GestureAndScaleRecognizer.Listener() {
 
             boolean scrolledWithFinger;
 
             @Override
             public boolean onUp(MotionEvent e) {
                 mScrollRemainder = 0.0f;
-                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !mIsSelectingText && !scrolledWithFinger) {
+                if (mEmulator != null
+                    && mEmulator.isMouseTrackingActive()
+                    && !mIsSelectingText
+                    && !scrolledWithFinger) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
                     sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON, true);
@@ -118,7 +122,8 @@ public final class TerminalView extends View {
             @Override
             public boolean onScroll(MotionEvent e, float distanceX, float distanceY) {
                 if (mEmulator == null || mIsSelectingText) return true;
-                if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+                if (mEmulator.isMouseTrackingActive()
+                    && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     // If moving with mouse pointer while pressing button, report that instead of scroll.
                     // This means that we never report moving with button press-events for touch input,
                     // since we cannot just start sending these events without a starting press event,
@@ -200,7 +205,8 @@ public final class TerminalView extends View {
             }
         });
         mScroller = new Scroller(context);
-        AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        AccessibilityManager am = (AccessibilityManager) context.getSystemService(
+            Context.ACCESSIBILITY_SERVICE);
         mAccessibilityEnabled = am.isEnabled();
     }
 

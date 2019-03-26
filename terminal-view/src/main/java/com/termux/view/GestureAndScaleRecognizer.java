@@ -34,7 +34,8 @@ final class GestureAndScaleRecognizer {
     public GestureAndScaleRecognizer(Context context, Listener listener) {
         mListener = listener;
 
-        mGestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
+        mGestureDetector = new GestureDetector(
+            context, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
                 return mListener.onScroll(e2, dx, dy);
@@ -57,7 +58,8 @@ final class GestureAndScaleRecognizer {
             }
         }, null, true /* ignoreMultitouch */);
 
-        mGestureDetector.setOnDoubleTapListener(new GestureDetector.OnDoubleTapListener() {
+        mGestureDetector.setOnDoubleTapListener(
+            new GestureDetector.OnDoubleTapListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
                 return mListener.onSingleTapUp(e);
@@ -74,7 +76,8 @@ final class GestureAndScaleRecognizer {
             }
         });
 
-        mScaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        mScaleDetector = new ScaleGestureDetector(
+            context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector detector) {
                 return true;
@@ -82,7 +85,10 @@ final class GestureAndScaleRecognizer {
 
             @Override
             public boolean onScale(ScaleGestureDetector detector) {
-                return mListener.onScale(detector.getFocusX(), detector.getFocusY(), detector.getScaleFactor());
+                return mListener.onScale(
+                    detector.getFocusX(),
+                    detector.getFocusY(),
+                    detector.getScaleFactor());
             }
         });
         mScaleDetector.setQuickScaleEnabled(false);
