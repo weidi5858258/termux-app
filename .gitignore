@@ -46,7 +46,8 @@ terminal-emulator/build
 terminal-view/build
 terminal-view/terminal-view.iml
 termux-app.iml
-
+.push_git.sh
+.git_push_impl.sh
 
 
 
