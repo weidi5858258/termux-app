@@ -33,14 +33,13 @@ final class TermuxPreferences {
     }
 
     final static class KeyboardShortcut {
+        final int codePoint;
+        final int shortcutAction;
 
         KeyboardShortcut(int codePoint, int shortcutAction) {
             this.codePoint = codePoint;
             this.shortcutAction = shortcutAction;
         }
-
-        final int codePoint;
-        final int shortcutAction;
     }
 
     static final int SHORTCUT_ACTION_CREATE_SESSION = 1;
@@ -76,7 +75,7 @@ final class TermuxPreferences {
     /**
      * If value is not in the range [min, max], set it to either min or max.
      */
-    static int clamp(int value, int min, int max) {
+    private static int clamp(int value, int min, int max) {
         return Math.min(Math.max(value, min), max);
     }
 
@@ -151,11 +150,11 @@ final class TermuxPreferences {
         if (!propsFile.exists())
             propsFile = new File(TermuxService.HOME_PATH + "/.config/termux/termux.properties");
 
-        Properties props = new Properties();
+        Properties properties = new Properties();
         try {
             if (propsFile.isFile() && propsFile.canRead()) {
                 try (FileInputStream in = new FileInputStream(propsFile)) {
-                    props.load(new InputStreamReader(in, StandardCharsets.UTF_8));
+                    properties.load(new InputStreamReader(in, StandardCharsets.UTF_8));
                 }
             }
         } catch (IOException e) {
@@ -163,7 +162,7 @@ final class TermuxPreferences {
             Log.e("termux", "Error loading props", e);
         }
 
-        switch (props.getProperty("bell-character", "vibrate")) {
+        switch (properties.getProperty("bell-character", "vibrate")) {
             case "beep":
                 mBellBehaviour = BELL_BEEP;
                 break;
@@ -177,7 +176,7 @@ final class TermuxPreferences {
 
         try {
             JSONArray arr = new JSONArray(
-                props.getProperty(
+                properties.getProperty(
                     "extra-keys",
                     "[['ESC', 'TAB', 'CTRL', 'ALT', '-', 'DOWN', 'UP']]"));
 
@@ -195,13 +194,13 @@ final class TermuxPreferences {
             mExtraKeys = new String[0][];
         }
 
-        mBackIsEscape = "escape".equals(props.getProperty("back-key", "back"));
+        mBackIsEscape = "escape".equals(properties.getProperty("back-key", "back"));
 
         shortcuts.clear();
-        parseAction("shortcut.create-session", SHORTCUT_ACTION_CREATE_SESSION, props);
-        parseAction("shortcut.next-session", SHORTCUT_ACTION_NEXT_SESSION, props);
-        parseAction("shortcut.previous-session", SHORTCUT_ACTION_PREVIOUS_SESSION, props);
-        parseAction("shortcut.rename-session", SHORTCUT_ACTION_RENAME_SESSION, props);
+        parseAction("shortcut.create-session", SHORTCUT_ACTION_CREATE_SESSION, properties);
+        parseAction("shortcut.next-session", SHORTCUT_ACTION_NEXT_SESSION, properties);
+        parseAction("shortcut.previous-session", SHORTCUT_ACTION_PREVIOUS_SESSION, properties);
+        parseAction("shortcut.rename-session", SHORTCUT_ACTION_RENAME_SESSION, properties);
     }
 
     private void parseAction(String name, int shortcutAction, Properties props) {

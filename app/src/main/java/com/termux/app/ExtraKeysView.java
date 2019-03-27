@@ -44,7 +44,7 @@ public final class ExtraKeysView extends GridLayout {
      * HashMap that implements Python dict.get(key, default) function.
      * Default java.util .get(key) is then the same as .get(key, null);
      */
-    static class CleverMap<K,V> extends HashMap<K,V> {
+    private static class CleverMap<K,V> extends HashMap<K,V> {
         V get(K key, V defaultValue) {
             if(containsKey(key))
                 return get(key);
@@ -52,13 +52,13 @@ public final class ExtraKeysView extends GridLayout {
                 return defaultValue;
         }
     }
-    
-    static class CharDisplayMap extends CleverMap<String, String> {}
+
+    private static class CharDisplayMap extends CleverMap<String, String> {}
     
     /**
      * Keys are displayed in a natural looking way, like "→" for "RIGHT"
      */
-    static final Map<String, Integer> keyCodesForString = new HashMap<String, Integer>() {{
+    private static final Map<String, Integer> keyCodesForString = new HashMap<String, Integer>() {{
         put("ESC", KeyEvent.KEYCODE_ESCAPE);
         put("TAB", KeyEvent.KEYCODE_TAB);
         put("HOME", KeyEvent.KEYCODE_MOVE_HOME);
@@ -75,8 +75,8 @@ public final class ExtraKeysView extends GridLayout {
         put("ENTER", KeyEvent.KEYCODE_ENTER);
     }};
     
-    private static void sendKey(View view, String keyName) {
-        TerminalView terminalView = view.findViewById(R.id.terminal_view);
+    private static void sendKey(View rootView, String keyName) {
+        TerminalView terminalView = rootView.findViewById(R.id.terminal_view);
         if (keyCodesForString.containsKey(keyName)) {
             int keyCode = keyCodesForString.get(keyName);
             terminalView.onKeyDown(keyCode, new KeyEvent(KeyEvent.ACTION_UP, keyCode));
@@ -335,13 +335,13 @@ public final class ExtraKeysView extends GridLayout {
                 final Button finalButton = button;
                 button.setOnClickListener(v -> {
                     finalButton.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                    View root = getRootView();
+                    View rootView = getRootView();
                     if(Arrays.asList("CTRL", "ALT", "FN").contains(buttonText)) {
                         ToggleButton self = (ToggleButton) finalButton;
                         self.setChecked(self.isChecked());
                         self.setTextColor(self.isChecked() ? INTERESTING_COLOR : TEXT_COLOR);
                     } else {
-                        sendKey(root, buttonText);
+                        sendKey(rootView, buttonText);
                     }
                 });
 
