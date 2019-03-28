@@ -2,7 +2,6 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 28
-
     dependencies {
         implementation "androidx.annotation:annotation:1.0.1"
         implementation "androidx.viewpager:viewpager:1.0.0"
@@ -16,6 +15,15 @@ android {
         targetSdkVersion 28
         versionCode 66
         versionName "0.66"
+    }
+
+    signingConfigs {
+        debug {
+            keyAlias 'weidi'
+            keyPassword 'android'
+            storePassword 'android'
+            storeFile file('D:\\Tools\\weidi_keystore\\debug.keystore')
+        }
     }
 
     buildTypes {
