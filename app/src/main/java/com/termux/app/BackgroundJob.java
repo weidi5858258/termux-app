@@ -24,7 +24,10 @@ public final class BackgroundJob {
 
     final Process mProcess;
 
-    public BackgroundJob(String cwd, String fileToExecute, final String[] args, final TermuxService service) {
+    public BackgroundJob(String cwd,
+                         String fileToExecute,
+                         final String[] args,
+                         final TermuxService service) {
         String[] env = buildEnvironment(false, cwd);
         if (cwd == null) cwd = TermuxService.HOME_PATH;
 

@@ -15,6 +15,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -44,7 +45,9 @@ public final class TermuxService extends Service implements SessionChangedCallba
 
     private static final String NOTIFICATION_CHANNEL_ID = "termux_notification_channel";
 
-    /** Note that this is a symlink on the Android M preview. */
+    /**
+     * Note that this is a symlink on the Android M preview.
+     */
     @SuppressLint("SdCardPath")
     public static final String FILES_PATH = "/data/data/com.termux/files";
     public static final String PREFIX_PATH = FILES_PATH + "/usr";
@@ -55,22 +58,25 @@ public final class TermuxService extends Service implements SessionChangedCallba
     private static final String ACTION_STOP_SERVICE = "com.termux.service_stop";
     private static final String ACTION_LOCK_WAKE = "com.termux.service_wake_lock";
     private static final String ACTION_UNLOCK_WAKE = "com.termux.service_wake_unlock";
-    /** Intent action to launch a new terminal session. Executed from TermuxWidgetProvider. */
+    /**
+     * Intent action to launch a new terminal session. Executed from TermuxWidgetProvider.
+     */
     public static final String ACTION_EXECUTE = "com.termux.service_execute";
 
     public static final String EXTRA_ARGUMENTS = "com.termux.execute.arguments";
-
     public static final String EXTRA_CURRENT_WORKING_DIRECTORY = "com.termux.execute.cwd";
     private static final String EXTRA_EXECUTE_IN_BACKGROUND = "com.termux.execute.background";
 
-    /** This service is only bound from inside the same process and never uses IPC. */
+    /**
+     * This service is only bound from inside the same process and never uses IPC.
+     */
     class LocalBinder extends Binder {
         public final TermuxService service = TermuxService.this;
     }
 
     private final IBinder mBinder = new LocalBinder();
 
-    private final Handler mHandler = new Handler();
+    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
     /**
      * The terminal sessions which this service manages.
@@ -82,15 +88,32 @@ public final class TermuxService extends Service implements SessionChangedCallba
 
     final List<BackgroundJob> mBackgroundTasks = new ArrayList<>();
 
-    /** Note that the service may often outlive the activity, so need to clear this reference. */
+    /**
+     * Note that the service may often outlive the activity, so need to clear this reference.
+     */
     SessionChangedCallback mSessionChangeCallback;
 
-    /** The wake lock and wifi lock are always acquired and released together. */
+    /**
+     * The wake lock and wifi lock are always acquired and released together.
+     */
     private PowerManager.WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
 
-    /** If the user has executed the {@link #ACTION_STOP_SERVICE} intent. */
+    /**
+     * If the user has executed the {@link #ACTION_STOP_SERVICE} intent.
+     */
     boolean mWantsToStop = false;
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return mBinder;
+    }
+
+    @Override
+    public void onCreate() {
+        setupNotificationChannel();
+        startForeground(NOTIFICATION_ID, buildNotification());
+    }
 
     @SuppressLint("Wakelock")
     @Override
@@ -98,18 +121,25 @@ public final class TermuxService extends Service implements SessionChangedCallba
         String action = intent.getAction();
         if (ACTION_STOP_SERVICE.equals(action)) {
             mWantsToStop = true;
-            for (int i = 0; i < mTerminalSessions.size(); i++)
+            for (int i = 0; i < mTerminalSessions.size(); i++) {
                 mTerminalSessions.get(i).finishIfRunning();
+            }
             stopSelf();
         } else if (ACTION_LOCK_WAKE.equals(action)) {
             if (mWakeLock == null) {
-                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, EmulatorDebug.LOG_TAG);
+                PowerManager pm =
+                    (PowerManager) getSystemService(Context.POWER_SERVICE);
+                mWakeLock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    EmulatorDebug.LOG_TAG);
                 mWakeLock.acquire();
 
                 // http://tools.android.com/tech-docs/lint-in-studio-2-3#TOC-WifiManager-Leak
-                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-                mWifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, EmulatorDebug.LOG_TAG);
+                WifiManager wm =
+                    (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                mWifiLock = wm.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    EmulatorDebug.LOG_TAG);
                 mWifiLock.acquire();
 
                 updateNotification();
@@ -150,7 +180,8 @@ public final class TermuxService extends Service implements SessionChangedCallba
                 TermuxPreferences.storeCurrentSession(this, newSession);
 
                 // Launch the main Termux app, which will now show the current session:
-                startActivity(new Intent(this, TermuxActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                startActivity(new Intent(this, TermuxActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }
         } else if (action != null) {
             Log.e(EmulatorDebug.LOG_TAG, "Unknown TermuxService action: '" + action + "'");
@@ -162,88 +193,61 @@ public final class TermuxService extends Service implements SessionChangedCallba
     }
 
     @Override
-    public IBinder onBind(Intent intent) {
-        return mBinder;
-    }
-
-    @Override
-    public void onCreate() {
-        setupNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildNotification());
-    }
-
-    /** Update the shown foreground service notification after making any changes that affect it. */
-    void updateNotification() {
-        if (mWakeLock == null && mTerminalSessions.isEmpty() && mBackgroundTasks.isEmpty()) {
-            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            stopSelf();
-        } else {
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID, buildNotification());
-        }
-    }
-
-    private Notification buildNotification() {
-        Intent notifyIntent = new Intent(this, TermuxActivity.class);
-        // PendingIntent#getActivity(): "Note that the activity will be started outside of the context of an existing
-        // activity, so you must use the Intent.FLAG_ACTIVITY_NEW_TASK launch flag in the Intent":
-        notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notifyIntent, 0);
-
-        int sessionCount = mTerminalSessions.size();
-        int taskCount = mBackgroundTasks.size();
-        String contentText = sessionCount + " session" + (sessionCount == 1 ? "" : "s");
-        if (taskCount > 0) {
-            contentText += ", " + taskCount + " task" + (taskCount == 1 ? "" : "s");
-        }
-
-        final boolean wakeLockHeld = mWakeLock != null;
-        if (wakeLockHeld) contentText += " (wake lock held)";
-
-        Notification.Builder builder = new Notification.Builder(this);
-        builder.setContentTitle(getText(R.string.application_name));
-        builder.setContentText(contentText);
-        builder.setSmallIcon(R.drawable.ic_service_notification);
-        builder.setContentIntent(pendingIntent);
-        builder.setOngoing(true);
-
-        // If holding a wake or wifi lock consider the notification of high priority since it's using power,
-        // otherwise use a low priority
-        builder.setPriority((wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW);
-
-        // No need to show a timestamp:
-        builder.setShowWhen(false);
-
-        // Background color for small notification icon:
-        builder.setColor(0xFF000000);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setChannelId(NOTIFICATION_CHANNEL_ID);
-        }
-
-        Resources res = getResources();
-        Intent exitIntent = new Intent(this, TermuxService.class).setAction(ACTION_STOP_SERVICE);
-        builder.addAction(android.R.drawable.ic_delete, res.getString(R.string.notification_action_exit), PendingIntent.getService(this, 0, exitIntent, 0));
-
-        String newWakeAction = wakeLockHeld ? ACTION_UNLOCK_WAKE : ACTION_LOCK_WAKE;
-        Intent toggleWakeLockIntent = new Intent(this, TermuxService.class).setAction(newWakeAction);
-        String actionTitle = res.getString(wakeLockHeld ?
-            R.string.notification_action_wake_unlock :
-            R.string.notification_action_wake_lock);
-        int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
-        builder.addAction(actionIcon, actionTitle, PendingIntent.getService(this, 0, toggleWakeLockIntent, 0));
-
-        return builder.build();
-    }
-
-    @Override
     public void onDestroy() {
-        if (mWakeLock != null) mWakeLock.release();
-        if (mWifiLock != null) mWifiLock.release();
+        if (mWakeLock != null) {
+            mWakeLock.release();
+        }
+        if (mWifiLock != null) {
+            mWifiLock.release();
+        }
 
         stopForeground(true);
 
-        for (int i = 0; i < mTerminalSessions.size(); i++)
+        for (int i = 0; i < mTerminalSessions.size(); i++) {
             mTerminalSessions.get(i).finishIfRunning();
+        }
+    }
+
+    @Override
+    public void onTitleChanged(TerminalSession changedSession) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onTitleChanged(changedSession);
+        }
+    }
+
+    @Override
+    public void onSessionFinished(final TerminalSession finishedSession) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onSessionFinished(finishedSession);
+        }
+    }
+
+    @Override
+    public void onTextChanged(TerminalSession changedSession) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onTextChanged(changedSession);
+        }
+    }
+
+    @Override
+    public void onClipboardText(TerminalSession session, String text) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onClipboardText(session, text);
+        }
+    }
+
+    @Override
+    public void onBell(TerminalSession session) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onBell(session);
+        }
+    }
+
+    @Override
+    public void onColorsChanged(TerminalSession session) {
+        if (mSessionChangeCallback != null) {
+            mSessionChangeCallback.onColorsChanged(session);
+        }
     }
 
     public List<TerminalSession> getSessions() {
@@ -258,12 +262,17 @@ public final class TermuxService extends Service implements SessionChangedCallba
         }
     }
 
-    TerminalSession createTermSession(String executablePath, String[] arguments, String cwd, boolean failSafe) {
+    public TerminalSession createTermSession(String executablePath,
+                                             String[] arguments,
+                                             String cwd,
+                                             boolean failSafe) {
         new File(HOME_PATH).mkdirs();
 
-        if (cwd == null) cwd = HOME_PATH;
+        if (cwd == null) {
+            cwd = HOME_PATH;
+        }
 
-        String[] env = BackgroundJob.buildEnvironment(failSafe, cwd);
+        String[] environment = BackgroundJob.buildEnvironment(failSafe, cwd);
         boolean isLoginShell = false;
 
         if (executablePath == null) {
@@ -290,9 +299,11 @@ public final class TermuxService extends Service implements SessionChangedCallba
 
         String[] args = new String[processArgs.length];
         args[0] = processName;
-        if (processArgs.length > 1) System.arraycopy(processArgs, 1, args, 1, processArgs.length - 1);
+        if (processArgs.length > 1) {
+            System.arraycopy(processArgs, 1, args, 1, processArgs.length - 1);
+        }
 
-        TerminalSession session = new TerminalSession(executablePath, cwd, args, env, this);
+        TerminalSession session = new TerminalSession(executablePath, cwd, args, environment, this);
         mTerminalSessions.add(session);
         updateNotification();
         return session;
@@ -301,7 +312,8 @@ public final class TermuxService extends Service implements SessionChangedCallba
     public int removeTermSession(TerminalSession sessionToRemove) {
         int indexOfRemoved = mTerminalSessions.indexOf(sessionToRemove);
         mTerminalSessions.remove(indexOfRemoved);
-        if (mTerminalSessions.isEmpty() && mWakeLock == null) {
+        if (mTerminalSessions.isEmpty()
+            && mWakeLock == null) {
             // Finish if there are no sessions left and the wake lock is not held, otherwise keep the service alive if
             // holding wake lock since there may be daemon processes (e.g. sshd) running.
             stopSelf();
@@ -311,54 +323,111 @@ public final class TermuxService extends Service implements SessionChangedCallba
         return indexOfRemoved;
     }
 
-    @Override
-    public void onTitleChanged(TerminalSession changedSession) {
-        if (mSessionChangeCallback != null) mSessionChangeCallback.onTitleChanged(changedSession);
-    }
-
-    @Override
-    public void onSessionFinished(final TerminalSession finishedSession) {
-        if (mSessionChangeCallback != null)
-            mSessionChangeCallback.onSessionFinished(finishedSession);
-    }
-
-    @Override
-    public void onTextChanged(TerminalSession changedSession) {
-        if (mSessionChangeCallback != null) mSessionChangeCallback.onTextChanged(changedSession);
-    }
-
-    @Override
-    public void onClipboardText(TerminalSession session, String text) {
-        if (mSessionChangeCallback != null) mSessionChangeCallback.onClipboardText(session, text);
-    }
-
-    @Override
-    public void onBell(TerminalSession session) {
-        if (mSessionChangeCallback != null) mSessionChangeCallback.onBell(session);
-    }
-
-    @Override
-    public void onColorsChanged(TerminalSession session) {
-        if (mSessionChangeCallback != null) mSessionChangeCallback.onColorsChanged(session);
-    }
-
     public void onBackgroundJobExited(final BackgroundJob task) {
-        mHandler.post(() -> {
+        mUiHandler.post(() -> {
             mBackgroundTasks.remove(task);
             updateNotification();
         });
     }
 
+    /**
+     * Update the shown foreground service notification after making any changes that affect it.
+     */
+    private void updateNotification() {
+        if (mWakeLock == null
+            && mTerminalSessions.isEmpty()
+            && mBackgroundTasks.isEmpty()) {
+            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
+            stopSelf();
+        } else {
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(NOTIFICATION_ID, buildNotification());
+        }
+    }
+
+    private Notification buildNotification() {
+        Intent notifyIntent = new Intent(this, TermuxActivity.class);
+        // PendingIntent#getActivity(): "Note that the activity will be started outside of the context of an existing
+        // activity, so you must use the Intent.FLAG_ACTIVITY_NEW_TASK launch flag in the Intent":
+        notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notifyIntent,
+            0);
+
+        int sessionCount = mTerminalSessions.size();
+        int taskCount = mBackgroundTasks.size();
+        String contentText = sessionCount + " session" + (sessionCount == 1 ? "" : "s");
+        if (taskCount > 0) {
+            contentText += ", " + taskCount + " task" + (taskCount == 1 ? "" : "s");
+        }
+
+        final boolean wakeLockHeld = mWakeLock != null;
+        if (wakeLockHeld) {
+            contentText += " (wake lock held)";
+        }
+
+        Notification.Builder builder = new Notification.Builder(this);
+        //builder.setContentTitle(getText(R.string.application_name));
+        builder.setContentTitle("Alexander");
+        builder.setContentText(contentText);
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setContentIntent(pendingIntent);
+        builder.setOngoing(true);
+
+        // If holding a wake or wifi lock consider the notification of high priority since it's using power,
+        // otherwise use a low priority
+        builder.setPriority((wakeLockHeld) ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW);
+
+        // No need to show a timestamp:
+        builder.setShowWhen(false);
+
+        // Background color for small notification icon:
+        builder.setColor(0xFF000000);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setChannelId(NOTIFICATION_CHANNEL_ID);
+        }
+
+        Resources res = getResources();
+        // 注册"EXIT"按钮的操作
+        Intent exitIntent = new Intent(this, TermuxService.class)
+            .setAction(ACTION_STOP_SERVICE);
+        builder.addAction(android.R.drawable.ic_delete,
+            res.getString(R.string.notification_action_exit),
+            PendingIntent.getService(
+                this, 0, exitIntent, 0));
+
+        // 注册"ACQUIRE WAKELOCK"和"RELEASE WAKELOCK"按钮的操作
+        String newWakeAction = wakeLockHeld ? ACTION_UNLOCK_WAKE : ACTION_LOCK_WAKE;
+        Intent toggleWakeLockIntent = new Intent(this, TermuxService.class)
+            .setAction(newWakeAction);
+        String actionTitle = res.getString(wakeLockHeld ?
+            R.string.notification_action_wake_unlock :
+            R.string.notification_action_wake_lock);
+        int actionIcon = wakeLockHeld ? android.R.drawable.ic_lock_idle_lock : android.R.drawable.ic_lock_lock;
+        builder.addAction(actionIcon,
+            actionTitle,
+            PendingIntent.getService(
+                this, 0, toggleWakeLockIntent, 0));
+
+        return builder.build();
+    }
+
     private void setupNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
 
         String channelName = "Termux";
         String channelDescription = "Notifications from Termux";
         int importance = NotificationManager.IMPORTANCE_LOW;
-
-        NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName,importance);
+        NotificationChannel channel = new NotificationChannel(
+            NOTIFICATION_CHANNEL_ID, channelName, importance);
         channel.setDescription(channelDescription);
-        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager manager =
+            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         manager.createNotificationChannel(channel);
     }
 }

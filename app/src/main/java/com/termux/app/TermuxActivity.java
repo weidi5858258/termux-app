@@ -145,7 +145,6 @@ public final class TermuxActivity extends Activity {
     @Override
     public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
-
         setContentView(R.layout.drawer_layout);
 
         mSettings = new TermuxPreferences(this);
@@ -166,13 +165,25 @@ public final class TermuxActivity extends Activity {
             Log.i(TAG, "onCreate() layoutParams.height: " + layoutParams.height);
         }
         mViewPager.setLayoutParams(layoutParams);
-
         mViewPager.setAdapter(mPagerAdapter);
-
         mViewPager.addOnPageChangeListener(mViewPagerSimpleOnPageChangeListener);
 
+        View toggleKeyboardButton = findViewById(R.id.toggle_keyboard_button);
+        toggleKeyboardButton.setOnClickListener(v -> {
+            InputMethodManager imm =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            imm.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+            getDrawer().closeDrawers();
+        });
+        toggleKeyboardButton.setOnLongClickListener(v -> {
+            toggleShowExtraKeys();
+            return true;
+        });
+
         View newSessionButton = findViewById(R.id.new_session_button);
-        newSessionButton.setOnClickListener(v -> addNewSession(false, null));
+        newSessionButton.setOnClickListener(v -> {
+            addNewSession(false, null);
+        });
         newSessionButton.setOnLongClickListener(v -> {
             DialogUtils.textInput(TermuxActivity.this,
                 R.string.session_new_named_title,
@@ -187,19 +198,7 @@ public final class TermuxActivity extends Activity {
             return true;
         });
 
-        View toggleKeyboardButton = findViewById(R.id.toggle_keyboard_button);
-        toggleKeyboardButton.setOnClickListener(v -> {
-            InputMethodManager imm =
-                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
-            getDrawer().closeDrawers();
-        });
-
-        toggleKeyboardButton.setOnLongClickListener(v -> {
-            toggleShowExtraKeys();
-            return true;
-        });
-
+        // about Menu
         registerForContextMenu(mTerminalView);
 
         Intent serviceIntent = new Intent(this, TermuxService.class);
@@ -237,7 +236,9 @@ public final class TermuxActivity extends Activity {
         super.onStop();
         mIsVisible = false;
         TerminalSession currentSession = getCurrentTermSession();
-        if (currentSession != null) TermuxPreferences.storeCurrentSession(this, currentSession);
+        if (currentSession != null) {
+            TermuxPreferences.storeCurrentSession(this, currentSession);
+        }
         unregisterReceiver(mBroadcastReceiever);
         getDrawer().closeDrawers();
     }
@@ -253,10 +254,14 @@ public final class TermuxActivity extends Activity {
         unbindService(mServiceConnection);
     }
 
+    //////////////////////////////////////Menu start//////////////////////////////////////
+
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
         TerminalSession currentSession = getCurrentTermSession();
-        if (currentSession == null) return;
+        if (currentSession == null) {
+            return;
+        }
 
         menu.add(Menu.NONE, CONTEXTMENU_SELECT_URL_ID, Menu.NONE, R.string.select_url);
         menu.add(Menu.NONE, CONTEXTMENU_SHARE_TRANSCRIPT_ID, Menu.NONE, R.string.select_all_and_share);
@@ -279,7 +284,6 @@ public final class TermuxActivity extends Activity {
     @Override
     public boolean onContextItemSelected(MenuItem item) {
         TerminalSession session = getCurrentTermSession();
-
         switch (item.getItemId()) {
             case CONTEXTMENU_SELECT_URL_ID:
                 showUrlSelection();
@@ -345,6 +349,8 @@ public final class TermuxActivity extends Activity {
         }
     }
 
+    //////////////////////////////////////Menu end//////////////////////////////////////
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
         if (requestCode == REQUESTCODE_PERMISSION_STORAGE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -376,13 +382,6 @@ public final class TermuxActivity extends Activity {
         } else {
             // Always granted before Android 6.0.
             return true;
-        }
-    }
-
-    private void updateBackgroundColor() {
-        TerminalSession session = getCurrentTermSession();
-        if (session != null && session.getEmulator() != null) {
-            getWindow().getDecorView().setBackgroundColor(session.getEmulator().mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]);
         }
     }
 
@@ -426,8 +425,11 @@ public final class TermuxActivity extends Activity {
 
     public void addNewSession(boolean failSafe, String sessionName) {
         if (mTermService.getSessions().size() >= MAX_SESSIONS) {
-            new AlertDialog.Builder(this).setTitle(R.string.max_terminals_reached_title).setMessage(R.string.max_terminals_reached_message)
-                .setPositiveButton(android.R.string.ok, null).show();
+            new AlertDialog.Builder(this)
+                .setTitle(R.string.max_terminals_reached_title)
+                .setMessage(R.string.max_terminals_reached_message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
         } else {
             String executablePath = (failSafe ? "/system/bin/sh" : null);
             TerminalSession newSession = mTermService.createTermSession(executablePath, null, null, failSafe);
@@ -436,6 +438,13 @@ public final class TermuxActivity extends Activity {
             }
             switchToSession(newSession);
             getDrawer().closeDrawers();
+        }
+    }
+
+    private void updateBackgroundColor() {
+        TerminalSession session = getCurrentTermSession();
+        if (session != null && session.getEmulator() != null) {
+            getWindow().getDecorView().setBackgroundColor(session.getEmulator().mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]);
         }
     }
 
@@ -618,7 +627,11 @@ public final class TermuxActivity extends Activity {
             }
             updateBackgroundColor();
 
-            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
+            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0)
+                ?
+                Typeface.createFromFile(fontFile)
+                :
+                Typeface.MONOSPACE;
             mTerminalView.setTypeface(newTypeface);
         } catch (Exception e) {
             Log.e(EmulatorDebug.LOG_TAG, "Error in checkForFontAndColors()", e);
@@ -641,8 +654,12 @@ public final class TermuxActivity extends Activity {
             mTermService.mSessionChangeCallback = new SessionChangedCallback() {
                 @Override
                 public void onTextChanged(TerminalSession changedSession) {
-                    if (!mIsVisible) return;
-                    if (getCurrentTermSession() == changedSession) mTerminalView.onScreenUpdated();
+                    if (!mIsVisible) {
+                        return;
+                    }
+                    if (getCurrentTermSession() == changedSession) {
+                        mTerminalView.onScreenUpdated();
+                    }
                 }
 
                 @Override
@@ -668,8 +685,9 @@ public final class TermuxActivity extends Activity {
                         // Show toast for non-current sessions that exit.
                         int indexOfSession = mTermService.getSessions().indexOf(finishedSession);
                         // Verify that session was not removed before we got told about it finishing:
-                        if (indexOfSession >= 0)
+                        if (indexOfSession >= 0) {
                             showToast(toToastTitle(finishedSession) + " - exited", true);
+                        }
                     }
 
                     if (mTermService.getSessions().size() > 1) {
@@ -711,7 +729,10 @@ public final class TermuxActivity extends Activity {
             };
 
             ListView listView = findViewById(R.id.left_drawer_list);
-            mListViewAdapter = new ArrayAdapter<TerminalSession>(getApplicationContext(), R.layout.line_in_drawer, mTermService.getSessions()) {
+            mListViewAdapter = new ArrayAdapter<TerminalSession>(
+                getApplicationContext(),
+                R.layout.line_in_drawer,
+                mTermService.getSessions()) {
                 final StyleSpan boldSpan = new StyleSpan(Typeface.BOLD);
                 final StyleSpan italicSpan = new StyleSpan(Typeface.ITALIC);
 
@@ -794,6 +815,7 @@ public final class TermuxActivity extends Activity {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            Log.e(TAG, "onServiceDisconnected() ComponentName: " + name);
             // Respect being stopped from the TermuxService notification action.
             finish();
         }
