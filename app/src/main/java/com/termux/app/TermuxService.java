@@ -345,10 +345,15 @@ public final class TermuxService extends Service implements SessionChangedCallba
         }
     }
 
+    // 创建Notification
     private Notification buildNotification() {
+        // 首先需要设置点击这个Notification需要跳转到的地方
         Intent notifyIntent = new Intent(this, TermuxActivity.class);
-        // PendingIntent#getActivity(): "Note that the activity will be started outside of the context of an existing
-        // activity, so you must use the Intent.FLAG_ACTIVITY_NEW_TASK launch flag in the Intent":
+        /***
+         PendingIntent#getActivity():
+         "Note that the activity will be started outside of the context of an existing
+         activity, so you must use the Intent.FLAG_ACTIVITY_NEW_TASK launch flag in the Intent":
+         */
         notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
